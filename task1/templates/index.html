@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Password Strength Analyzer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #13131c;
+      --border:   #1f1f30;
+      --accent:   #6c63ff;
+      --accent2:  #ff6584;
+      --text:     #e8e8f0;
+      --muted:    #6b6b8a;
+      --radius:   12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise grain overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Glowing orbs ── */
+    .orb {
+      position: fixed; border-radius: 50%;
+      filter: blur(80px); opacity: .15; pointer-events: none;
+    }
+    .orb1 { width:500px; height:500px; background:var(--accent);  top:-150px; left:-100px; }
+    .orb2 { width:400px; height:400px; background:var(--accent2); bottom:-100px; right:-80px; }
+
+    main {
+      position: relative; z-index: 1;
+      max-width: 740px; margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header { text-align: center; margin-bottom: 48px; }
+    .logo { font-size: 2.8rem; font-weight: 800; letter-spacing: -1px; }
+    .logo span { color: var(--accent); }
+    .tagline { color: var(--muted); font-size: .95rem; margin-top: 6px; font-family: 'Space Mono', monospace; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: .7rem; font-weight: 700; letter-spacing: 3px;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Input ── */
+    .input-wrap {
+      position: relative; display: flex; align-items: center;
+    }
+    #pw-input {
+      width: 100%;
+      background: #0d0d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      font-size: 1rem;
+      padding: 14px 52px 14px 16px;
+      outline: none;
+      transition: border-color .2s;
+      letter-spacing: 1px;
+    }
+    #pw-input:focus { border-color: var(--accent); }
+    .eye-btn {
+      position: absolute; right: 14px;
+      background: none; border: none;
+      color: var(--muted); cursor: pointer; font-size: 1.1rem;
+      transition: color .2s;
+    }
+    .eye-btn:hover { color: var(--text); }
+
+    /* ── Meter ── */
+    .meter-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+    .meter-bar-wrap {
+      flex: 1; height: 8px;
+      background: #1a1a2e;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .meter-bar {
+      height: 100%; border-radius: 999px;
+      width: 0; transition: width .5s cubic-bezier(.4,0,.2,1), background .4s;
+    }
+    .meter-label {
+      font-size: .85rem; font-weight: 700;
+      min-width: 90px; text-align: right;
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── Score circle ── */
+    .score-ring-wrap { display: flex; justify-content: center; margin: 20px 0 12px; }
+    .score-ring {
+      width: 110px; height: 110px;
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      border: 3px solid var(--border);
+      transition: border-color .4s;
+      position: relative;
+    }
+    .score-num  { font-size: 2rem; font-weight: 800; font-family: 'Space Mono', monospace; line-height: 1; }
+    .score-sub  { font-size: .6rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+
+    /* ── Stats grid ── */
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 16px; }
+    .stat {
+      background: #0d0d16; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.2rem; font-weight: 800; font-family: 'Space Mono', monospace; }
+    .stat-lbl { font-size: .65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-top: 2px; }
+
+    /* ── Checklist ── */
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+    .check-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .82rem; color: var(--muted);
+      transition: color .3s;
+    }
+    .check-item.ok { color: #4ade80; }
+    .check-item .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; flex-shrink: 0;
+      transition: background .3s;
+    }
+
+    /* ── Issues ── */
+    #issues-list { list-style: none; }
+    #issues-list li {
+      font-size: .83rem; color: #fbbf24;
+      padding: 6px 0; border-bottom: 1px solid var(--border);
+      font-family: 'Space Mono', monospace;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    #issues-list li::before { content: "→"; color: var(--accent2); flex-shrink: 0; }
+    #issues-list li:last-child { border-bottom: none; }
+
+    /* ── Suggestions ── */
+    .suggestion-card {
+      background: #0d0d16; border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 14px;
+      margin-bottom: 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .sug-type { font-size: .6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+    .sug-pw {
+      font-family: 'Space Mono', monospace;
+      font-size: .88rem; color: var(--text);
+      word-break: break-all;
+    }
+    .copy-btn {
+      flex-shrink: 0; background: var(--accent);
+      border: none; border-radius: 6px;
+      color: #fff; font-size: .75rem; font-weight: 700;
+      padding: 6px 12px; cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      transition: opacity .2s, transform .1s;
+      letter-spacing: 1px;
+    }
+    .copy-btn:hover  { opacity: .85; }
+    .copy-btn:active { transform: scale(.96); }
+    .copy-btn.copied { background: #22c55e; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .btn {
+      flex: 1; padding: 12px;
+      border-radius: 8px; border: 1px solid var(--border);
+      font-family: 'Syne', sans-serif; font-size: .85rem; font-weight: 700;
+      cursor: pointer; transition: all .2s; letter-spacing: .5px;
+    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover { opacity: .85; }
+    .btn-outline { background: transparent; color: var(--text); }
+    .btn-outline:hover { background: var(--border); }
+    .btn-danger { background: transparent; color: #ef4444; border-color: #ef4444; }
+    .btn-danger:hover { background: #ef444420; }
+
+    /* ── History badge ── */
+    .history-row {
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: .82rem; margin-top: 4px;
+    }
+    .badge {
+      background: var(--border); border-radius: 999px;
+      padding: 3px 10px; font-size: .75rem;
+      font-family: 'Space Mono', monospace;
+    }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: #22c55e; color: #000;
+      padding: 10px 22px; border-radius: 999px;
+      font-weight: 700; font-size: .85rem;
+      transition: transform .35s cubic-bezier(.4,0,.2,1);
+      z-index: 99; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Hidden ── */
+    .hidden { display: none !important; }
+
+    /* ── Placeholder state ── */
+    .placeholder-hint {
+      text-align: center; padding: 28px;
+      color: var(--muted); font-size: .88rem;
+      font-family: 'Space Mono', monospace;
+    }
+  </style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<main>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">🔐 Pass<span>Guard</span></div>
+    <p class="tagline">// real-time password strength analyzer</p>
+  </header>
+
+  <!-- Input Card -->
+  <div class="card">
+    <div class="card-title">Enter Password</div>
+    <div class="input-wrap">
+      <input id="pw-input" type="password" placeholder="Type your password here…" autocomplete="off" />
+      <button class="eye-btn" id="eye-btn" title="Show/hide">👁</button>
+    </div>
+    <div class="meter-row">
+      <div class="meter-bar-wrap"><div class="meter-bar" id="meter-bar"></div></div>
+      <span class="meter-label" id="meter-label" style="color:var(--muted)">—</span>
+    </div>
+  </div>
+
+  <!-- Score + Stats Card -->
+  <div class="card" id="result-card">
+    <div id="empty-hint" class="placeholder-hint">Start typing to see analysis…</div>
+    <div id="analysis-content" class="hidden">
+      <div class="score-ring-wrap">
+        <div class="score-ring" id="score-ring">
+          <span class="score-num" id="score-num">0</span>
+          <span class="score-sub">/ 100</span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-val" id="s-len">—</div>
+          <div class="stat-lbl">Length</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="s-entropy">—</div>
+          <div class="stat-lbl">Entropy (bits)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val" id="s-crack" style="font-size:.85rem">—</div>
+          <div class="stat-lbl">Est. Crack Time</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checks Card -->
+  <div class="card" id="checks-card" style="display:none">
+    <div class="card-title">Complexity Checklist</div>
+    <div class="checks">
+      <div class="check-item" id="c-length8"><span class="dot"></span>8+ characters</div>
+      <div class="check-item" id="c-length12"><span class="dot"></span>12+ characters</div>
+      <div class="check-item" id="c-length16"><span class="dot"></span>16+ characters</div>
+      <div class="check-item" id="c-upper"><span class="dot"></span>Uppercase (A-Z)</div>
+      <div class="check-item" id="c-lower"><span class="dot"></span>Lowercase (a-z)</div>
+      <div class="check-item" id="c-digit"><span class="dot"></span>Numbers (0-9)</div>
+      <div class="check-item" id="c-symbol"><span class="dot"></span>Symbols (!@#…)</div>
+      <div class="check-item" id="c-notcommon"><span class="dot"></span>Not common password</div>
+      <div class="check-item" id="c-notreused"><span class="dot"></span>Not previously used</div>
+    </div>
+  </div>
+
+  <!-- Issues Card -->
+  <div class="card" id="issues-card" style="display:none">
+    <div class="card-title">Suggestions to Improve</div>
+    <ul id="issues-list"></ul>
+  </div>
+
+  <!-- Save + History Card -->
+  <div class="card" id="save-card" style="display:none">
+    <div class="card-title">Password History (SQLite)</div>
+    <div class="history-row">
+      <span>Passwords stored (hashed): </span>
+      <span class="badge" id="history-count">0</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="save-btn">Save to History</button>
+      <button class="btn btn-danger" id="clear-btn">Clear History</button>
+    </div>
+  </div>
+
+  <!-- Generator Card -->
+  <div class="card">
+    <div class="card-title">Strong Password Generator</div>
+    <div id="gen-placeholder" class="placeholder-hint" style="padding:16px">
+      Click generate to get secure alternatives
+    </div>
+    <div id="gen-content" class="hidden">
+      <div class="suggestion-card">
+        <div>
+          <div class="sug-type">Random (18 chars)</div>
+          <div class="sug-pw" id="gen-random">—</div>
+        </div>
+        <button class="copy-btn" data-target="gen-random">Copy</button>
+      </div>
+      <div class="suggestion-card">
+        <div>
+          <div class="sug-type">Passphrase (memorable)</div>
+          <div class="sug-pw" id="gen-phrase">—</div>
+        </div>
+        <button class="copy-btn" data-target="gen-phrase">Copy</button>
+      </div>
+      <div class="suggestion-card">
+        <div>
+          <div class="sug-type">Short strong (12 chars)</div>
+          <div class="sug-pw" id="gen-short">—</div>
+        </div>
+        <button class="copy-btn" data-target="gen-short">Copy</button>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-outline" id="gen-btn">⚡ Generate Passwords</button>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast">✓ Copied!</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let debounceTimer;
+
+  // Eye toggle
+  $('eye-btn').addEventListener('click', () => {
+    const inp = $('pw-input');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  // Real-time analysis
+  $('pw-input').addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => analyze($('pw-input').value), 200);
+  });
+
+  async function analyze(pw) {
+    if (!pw) { resetUI(); return; }
+    try {
+      const res  = await fetch('/api/analyze', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({password: pw})
+      });
+      const data = await res.json();
+      renderResult(data);
+    } catch(e) { console.error(e); }
+  }
+
+  function renderResult(d) {
+    // Meter
+    const bar = $('meter-bar');
+    bar.style.width = d.score + '%';
+    bar.style.background = d.color;
+    $('meter-label').textContent = d.label;
+    $('meter-label').style.color = d.color;
+
+    // Score ring
+    $('score-num').textContent = d.score;
+    $('score-num').style.color = d.color;
+    $('score-ring').style.borderColor = d.color;
+
+    // Stats
+    $('s-len').textContent     = d.length;
+    $('s-entropy').textContent = d.entropy;
+    $('s-crack').textContent   = d.crack_time;
+
+    // Show analysis
+    $('empty-hint').classList.add('hidden');
+    $('analysis-content').classList.remove('hidden');
+    $('checks-card').style.display  = '';
+    $('issues-card').style.display  = '';
+    $('save-card').style.display    = '';
+
+    // Checks
+    const map = {
+      'c-length8':  d.checks.length8,
+      'c-length12': d.checks.length12,
+      'c-length16': d.checks.length16,
+      'c-upper':    d.checks.upper,
+      'c-lower':    d.checks.lower,
+      'c-digit':    d.checks.digit,
+      'c-symbol':   d.checks.symbol,
+      'c-notcommon':d.checks.not_common,
+      'c-notreused':d.checks.not_reused,
+    };
+    for (const [id, ok] of Object.entries(map)) {
+      $(id).classList.toggle('ok', ok);
+    }
+
+    // Issues
+    const ul = $('issues-list');
+    ul.innerHTML = '';
+    if (d.issues.length === 0) {
+      ul.innerHTML = '<li style="color:#4ade80">No issues — excellent password!</li>';
+    } else {
+      d.issues.forEach(i => {
+        const li = document.createElement('li');
+        li.textContent = i;
+        ul.appendChild(li);
+      });
+    }
+
+    // History count
+    $('history-count').textContent = d.history_count;
+  }
+
+  function resetUI() {
+    $('meter-bar').style.width = '0';
+    $('meter-label').textContent = '—';
+    $('empty-hint').classList.remove('hidden');
+    $('analysis-content').classList.add('hidden');
+    $('checks-card').style.display  = 'none';
+    $('issues-card').style.display  = 'none';
+    $('save-card').style.display    = 'none';
+  }
+
+  // Save
+  $('save-btn').addEventListener('click', async () => {
+    const pw = $('pw-input').value;
+    if (!pw) return;
+    const res  = await fetch('/api/save', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({password: pw})
+    });
+    const data = await res.json();
+    showToast(data.message);
+    if (data.history_count !== undefined)
+      $('history-count').textContent = data.history_count;
+    if (!data.saved) analyze(pw); // re-analyze to show reused flag
+  });
+
+  // Clear
+  $('clear-btn').addEventListener('click', async () => {
+    await fetch('/api/history/clear', {method:'POST'});
+    $('history-count').textContent = '0';
+    showToast('History cleared');
+    const pw = $('pw-input').value;
+    if (pw) analyze(pw);
+  });
+
+  // Generate
+  $('gen-btn').addEventListener('click', async () => {
+    const res  = await fetch('/api/generate');
+    const data = await res.json();
+    $('gen-random').textContent = data.random;
+    $('gen-phrase').textContent = data.passphrase;
+    $('gen-short').textContent  = data.short;
+    $('gen-placeholder').classList.add('hidden');
+    $('gen-content').classList.remove('hidden');
+  });
+
+  // Copy buttons
+  document.addEventListener('click', e => {
+    if (!e.target.classList.contains('copy-btn')) return;
+    const target = e.target.dataset.target;
+    const text   = $(target).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      e.target.textContent = 'Copied!';
+      e.target.classList.add('copied');
+      showToast('Password copied!');
+      setTimeout(() => {
+        e.target.textContent = 'Copy';
+        e.target.classList.remove('copied');
+      }, 1500);
+    });
+  });
+
+  function showToast(msg) {
+    const t = $('toast');
+    t.textContent = '✓ ' + msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2400);
+  }
+</script>
+</body>
+</html>
